@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Git management via lazygit
+# Launches lazygit for interactive git management
+
+set -euo pipefail
+
+# Check if lazygit is available
+if ! command -v lazygit >/dev/null 2>&1; then
+    echo "Error: lazygit not found. Please install it."
+    exit 1
+fi
+
+# Launch lazygit
+echo "Opening git manager..."
+exec lazygit

@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Brightness control with smart argument parsing
+# Usage: brightness [level|+amount|-amount]
+
+set -euo pipefail
+
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[0;33m'
+readonly RED='\033[0;31m'
+readonly NC='\033[0m'
+
+# Send notification if notify-send is available
+notify() {
+    local title="$1"
+    local message="$2"
+    local icon="${3:-brightness-high}"
+    
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -i "$icon" "$title" "$message" -t 2000
+    fi
+    echo -e "${GREEN}$title:${NC} $message"
+}
+
+# Get current brightness percentage
+get_brightness() {
+    if command -v brightnessctl >/dev/null 2>&1; then
+        brightnessctl get | awk -v max="$(brightnessctl max)" '{print int(($1/max)*100)}'
+    else
+        echo "50"  # fallback
+    fi
+}
+
+# Set brightness to specific level
+set_brightness() {
+    local level="$1"
+    
+    if command -v brightnessctl >/dev/null 2>&1; then
+        brightnessctl set "${level}%"
+        notify "Brightness" "${level}%" "brightness-high"
+    else
+        echo -e "${RED}Error:${NC} brightnessctl not found"
+        exit 1
+    fi
+}
+
+# Adjust brightness relative to current
+adjust_brightness() {
+    local adjustment="$1"
+    
+    if command -v brightnessctl >/dev/null 2>&1; then
+        brightnessctl set "${adjustment}%"
+        local new_brightness=$(get_brightness)
+        notify "Brightness" "${new_brightness}%" "brightness-medium"
+    else
+        echo -e "${RED}Error:${NC} brightnessctl not found"
+        exit 1
+    fi
+}
+
+# Main logic
+main() {
+    if [[ $# -eq 0 ]]; then
+        # No arguments - show current brightness
+        local brightness=$(get_brightness)
+        echo -e "${YELLOW}Brightness:${NC} ${brightness}%"
+        return
+    fi
+    
+    local arg="$1"
+    
+    case "$arg" in
+        +[0-9]*)
+            local amount="${arg:1}"
+            adjust_brightness "+${amount}"
+            ;;
+        -[0-9]*)
+            local amount="${arg:1}"
+            adjust_brightness "-${amount}"
+            ;;
+        [0-9]*)
+            if (( arg >= 0 && arg <= 100 )); then
+                set_brightness "$arg"
+            else
+                echo -e "${RED}Error:${NC} Brightness must be between 0-100"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Usage: brightness [level|+amount|-amount]"
+            echo ""
+            echo "Examples:"
+            echo "  brightness 50   # Set brightness to 50%"
+            echo "  brightness +10  # Increase brightness by 10%"
+            echo "  brightness -20  # Decrease brightness by 20%"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

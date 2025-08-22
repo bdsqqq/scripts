@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Process monitor via btop
+# Launches btop for interactive process monitoring
+
+set -euo pipefail
+
+# Check if btop is available, fallback to htop
+if command -v btop >/dev/null 2>&1; then
+    echo "Opening process monitor (btop)..."
+    exec btop
+elif command -v htop >/dev/null 2>&1; then
+    echo "Opening process monitor (htop)..."
+    exec htop
+else
+    echo "Error: Neither btop nor htop found."
+    exit 1
+fi

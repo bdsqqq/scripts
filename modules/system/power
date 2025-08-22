@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# System power management
+# Usage: power [suspend|restart|shutdown]
+
+set -euo pipefail
+
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[0;33m'
+readonly RED='\033[0;31m'
+readonly NC='\033[0m'
+
+# Send notification if notify-send is available
+notify() {
+    local title="$1"
+    local message="$2"
+    local icon="${3:-system-shutdown}"
+    
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -i "$icon" "$title" "$message" -t 3000
+    fi
+    echo -e "${GREEN}$title:${NC} $message"
+}
+
+# Main logic
+main() {
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: power [suspend|restart|shutdown]"
+        echo ""
+        echo "Examples:"
+        echo "  power suspend   # Suspend system"
+        echo "  power restart   # Restart system"
+        echo "  power shutdown  # Shutdown system"
+        exit 1
+    fi
+    
+    local action="$1"
+    
+    case "$action" in
+        suspend)
+            notify "System" "Suspending..." "system-suspend"
+            sleep 1
+            systemctl suspend
+            ;;
+        restart|reboot)
+            notify "System" "Restarting..." "system-reboot"
+            sleep 2
+            systemctl reboot
+            ;;
+        shutdown|poweroff)
+            notify "System" "Shutting down..." "system-shutdown"
+            sleep 2
+            systemctl poweroff
+            ;;
+        *)
+            echo -e "${RED}Error:${NC} Unknown power action: $action"
+            echo "Valid actions: suspend, restart, shutdown"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Interactive audio device manager
+# Opens pavucontrol for full audio management
+
+set -euo pipefail
+
+# Check if pavucontrol is available
+if ! command -v pavucontrol >/dev/null 2>&1; then
+    echo "Error: pavucontrol not found. Please install it."
+    exit 1
+fi
+
+# Launch pavucontrol
+echo "Opening audio manager..."
+exec pavucontrol

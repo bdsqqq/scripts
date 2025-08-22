@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Unified Raycast-style launcher: combines commands and applications
+# Usage: fuzzel-launcher
+
+set -euo pipefail
+
+SCRIPTS_DIR="$(dirname "$0")/modules"
+
+# Build combined list of custom commands and applications
+selected=$({
+    # Custom commands - full names for better fuzzy matching
+    echo "volume"
+    echo "brightness" 
+    echo "network"
+    echo "bluetooth"
+    echo "suspend"
+    echo "restart" 
+    echo "shutdown"
+    
+    # Get all executables from PATH using compgen
+    compgen -c 2>/dev/null | sort -u
+    
+} | fuzzel --dmenu --prompt="❯ " --lines=15 --width=80 --fuzzy-min-length=1 --match-mode=fuzzy)
+
+if [[ -n "$selected" ]]; then
+    # Dynamic command parsing - check for patterns with arguments first
+    if [[ "$selected" =~ ^"volume ".+ ]]; then
+        # Extract volume value: "volume 20" → "20"  
+        volume="${selected#volume }"
+        exec "$SCRIPTS_DIR/audio/volume" "$volume"
+        
+    elif [[ "$selected" =~ ^"brightness ".+ ]]; then
+        # Extract brightness value: "brightness 50" → "50"
+        brightness="${selected#brightness }"
+        exec "$SCRIPTS_DIR/system/brightness" "$brightness"
+        
+    # Single word commands
+    elif [[ "$selected" == "network" ]]; then
+        exec networkmanager_dmenu
+    elif [[ "$selected" == "bluetooth" ]]; then
+        exec "$SCRIPTS_DIR/bluetooth/fuzzel-bluetooth"
+    elif [[ "$selected" == "volume" ]]; then
+        # Use same fuzzel window to prompt for volume
+        volume=$(echo '' | fuzzel --dmenu --lines=0 --prompt="Volume (0-100, +/-N): " --width=80 --fuzzy-min-length=1)
+        if [[ -n "$volume" ]]; then
+            exec "$SCRIPTS_DIR/audio/volume" "$volume"
+        fi
+    elif [[ "$selected" == "brightness" ]]; then
+        # Use same fuzzel window to prompt for brightness  
+        brightness=$(echo '' | fuzzel --dmenu --lines=0 --prompt="Brightness (0-100, +/-N): " --width=80 --fuzzy-min-length=1)
+        if [[ -n "$brightness" ]]; then
+            exec "$SCRIPTS_DIR/system/brightness" "$brightness"
+        fi
+    elif [[ "$selected" == "suspend" ]]; then
+        exec systemctl suspend
+    elif [[ "$selected" == "restart" ]]; then
+        exec systemctl reboot
+    elif [[ "$selected" == "shutdown" ]]; then
+        exec systemctl poweroff
+        
+    # If no command pattern matches, treat as application launcher
+    else
+        # Try to launch as application
+        exec "$selected" 2>/dev/null || {
+            # If launch fails, show error notification 
+            notify-send "Launcher" "Could not launch: $selected" -i error 2>/dev/null || true
+        }
+    fi
+else
+    # Empty state - show user that nothing was selected
+    notify-send "Launcher" "No selection made" -i dialog-information 2>/dev/null || true
+fi

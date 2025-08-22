@@ -1,0 +1,240 @@
+#!/usr/bin/env bash
+# Fuzzel-based Bluetooth manager inspired by dmenu-bluetooth
+# Usage: fuzzel-bluetooth
+
+set -euo pipefail
+
+# Configuration
+LAUNCHER="fuzzel --dmenu --prompt='Bluetooth: ' --lines=15 --width=80"
+
+# Check if Bluetooth is powered on
+power_on() {
+    bluetoothctl show | grep -q "Powered: yes"
+}
+
+# Toggle Bluetooth power
+toggle_power() {
+    if power_on; then
+        bluetoothctl power off
+        notify-send -i bluetooth "Bluetooth" "Bluetooth turned off" 2>/dev/null || true
+    else
+        bluetoothctl power on
+        notify-send -i bluetooth "Bluetooth" "Bluetooth turned on" 2>/dev/null || true
+    fi
+}
+
+# Check if scanning is active
+scan_on() {
+    bluetoothctl show | grep -q "Discovering: yes"
+}
+
+# Toggle device scanning
+toggle_scan() {
+    if scan_on; then
+        bluetoothctl scan off
+        notify-send -i bluetooth "Bluetooth" "Stopped scanning" 2>/dev/null || true
+    else
+        bluetoothctl scan on
+        notify-send -i bluetooth "Bluetooth" "Started scanning for devices..." 2>/dev/null || true
+    fi
+}
+
+# Check if device is connected
+device_connected() {
+    local device="$1"
+    bluetoothctl info "$device" | grep -q "Connected: yes"
+}
+
+# Toggle device connection
+toggle_connection() {
+    local device="$1"
+    local name=$(bluetoothctl devices | grep "$device" | cut -d' ' -f3-)
+    
+    if device_connected "$device"; then
+        bluetoothctl disconnect "$device" >/dev/null 2>&1
+        notify-send -i bluetooth "Bluetooth" "Disconnected from $name" 2>/dev/null || true
+    else
+        bluetoothctl connect "$device" >/dev/null 2>&1
+        notify-send -i bluetooth "Bluetooth" "Connected to $name" 2>/dev/null || true
+    fi
+}
+
+# Check if device is paired
+device_paired() {
+    local device="$1"
+    bluetoothctl info "$device" | grep -q "Paired: yes"
+}
+
+# Toggle device pairing
+toggle_paired() {
+    local device="$1"
+    local name=$(bluetoothctl devices | grep "$device" | cut -d' ' -f3-)
+    
+    if device_paired "$device"; then
+        bluetoothctl remove "$device" >/dev/null 2>&1
+        notify-send -i bluetooth "Bluetooth" "Removed $name" 2>/dev/null || true
+    else
+        bluetoothctl pair "$device" >/dev/null 2>&1
+        bluetoothctl trust "$device" >/dev/null 2>&1
+        notify-send -i bluetooth "Bluetooth" "Paired with $name" 2>/dev/null || true
+    fi
+}
+
+# Check if device is trusted
+device_trusted() {
+    local device="$1"
+    bluetoothctl info "$device" | grep -q "Trusted: yes"
+}
+
+# Toggle device trust
+toggle_trust() {
+    local device="$1"
+    local name=$(bluetoothctl devices | grep "$device" | cut -d' ' -f3-)
+    
+    if device_trusted "$device"; then
+        bluetoothctl untrust "$device" >/dev/null 2>&1
+        notify-send -i bluetooth "Bluetooth" "Untrusted $name" 2>/dev/null || true
+    else
+        bluetoothctl trust "$device" >/dev/null 2>&1
+        notify-send -i bluetooth "Bluetooth" "Trusted $name" 2>/dev/null || true
+    fi
+}
+
+# Show device-specific menu
+device_menu() {
+    local device="$1"
+    local name=$(bluetoothctl devices | grep "$device" | cut -d' ' -f3-)
+    
+    local options=()
+    
+    # Connection status
+    if device_connected "$device"; then
+        options+=("󰂱 Disconnect")
+    else
+        options+=("󰂯 Connect")
+    fi
+    
+    # Pairing status
+    if device_paired "$device"; then
+        options+=("󰆴 Remove Device")
+    else
+        options+=("󰂲 Pair Device")
+    fi
+    
+    # Trust status
+    if device_trusted "$device"; then
+        options+=("󰗹 Untrust")
+    else
+        options+=("󰗠 Trust")
+    fi
+    
+    options+=("󰁍 Back to Main Menu")
+    
+    local choice=$(printf '%s\n' "${options[@]}" | eval "$LAUNCHER --prompt='$name: '")
+    
+    case "$choice" in
+        "󰂱 Disconnect"|"󰂯 Connect")
+            toggle_connection "$device"
+            ;;
+        "󰆴 Remove Device"|"󰂲 Pair Device")
+            toggle_paired "$device"
+            ;;
+        "󰗹 Untrust"|"󰗠 Trust")
+            toggle_trust "$device"
+            ;;
+        "󰁍 Back to Main Menu")
+            show_menu
+            ;;
+    esac
+}
+
+# Show main Bluetooth menu
+show_menu() {
+    local options=()
+    
+    # Power control
+    if power_on; then
+        options+=("󰂲 Turn Bluetooth Off")
+        
+        # Scanning control
+        if scan_on; then
+            options+=("󰤷 Stop Scanning")
+        else
+            options+=("󰤷 Start Scanning")
+        fi
+        
+        options+=("󰂲 Make Discoverable")
+        
+        # Add separator if devices exist
+        if bluetoothctl devices | grep -q "Device"; then
+            options+=("---")
+            
+            # Add all known devices
+            while read -r line; do
+                [[ -z "$line" ]] && continue
+                local device=$(echo "$line" | awk '{print $2}')
+                local name=$(echo "$line" | awk '{$1=$2=""; print $0}' | sed 's/^ *//')
+                [[ -z "$name" ]] && name="Unknown Device"
+                
+                local status_icon="󰂲"
+                local status_text="Available"
+                
+                if device_connected "$device"; then
+                    status_icon="󰂱"
+                    status_text="Connected"
+                elif device_paired "$device"; then
+                    status_icon="󰂯"
+                    status_text="Paired"
+                fi
+                
+                options+=("$status_icon $name • $status_text")
+            done < <(bluetoothctl devices)
+        fi
+    else
+        options+=("󰂲 Turn Bluetooth On")
+    fi
+    
+    local choice=$(printf '%s\n' "${options[@]}" | eval "$LAUNCHER")
+    
+    case "$choice" in
+        "󰂲 Turn Bluetooth On"|"󰂲 Turn Bluetooth Off")
+            toggle_power
+            ;;
+        "󰤷 Start Scanning"|"󰤷 Stop Scanning")
+            toggle_scan
+            ;;
+        "󰂲 Make Discoverable")
+            bluetoothctl discoverable on >/dev/null 2>&1
+            notify-send -i bluetooth "Bluetooth" "Computer is now discoverable" 2>/dev/null || true
+            ;;
+        "---")
+            # Ignore separator
+            ;;
+        "")
+            # User cancelled
+            ;;
+        *)
+            # Device selected - extract device MAC and show device menu
+            if [[ "$choice" =~ ^[󰂱󰂯󰂲][[:space:]](.+)[[:space:]]•[[:space:]](.+)$ ]]; then
+                local device_name="${BASH_REMATCH[1]}"
+                local device=$(bluetoothctl devices | grep "$device_name" | awk '{print $2}')
+                if [[ -n "$device" ]]; then
+                    device_menu "$device"
+                fi
+            fi
+            ;;
+    esac
+}
+
+# Main execution
+main() {
+    # Check if bluetoothctl is available
+    if ! command -v bluetoothctl >/dev/null 2>&1; then
+        notify-send -i error "Bluetooth" "bluetoothctl not found" 2>/dev/null || true
+        exit 1
+    fi
+    
+    show_menu
+}
+
+main "$@"

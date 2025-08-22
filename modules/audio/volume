@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Audio volume control with smart argument parsing
+# Usage: volume [level|+amount|-amount|mute|unmute]
+
+set -euo pipefail
+
+# Colors for notifications (theme-adaptive)
+readonly BOLD='\033[1m'        # Active/important items
+readonly DIM='\033[2m'         # Disabled items
+readonly NC='\033[0m'          # Reset
+
+# Send notification if notify-send is available
+notify() {
+    local title="$1"
+    local message="$2"
+    local icon="${3:-audio-volume-medium}"
+    
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -i "$icon" "$title" "$message" -t 2000
+    fi
+    echo -e "$title: $message"
+}
+
+# Get current volume
+get_volume() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -o '[0-9.]*' | head -1 | awk '{print int($1*100)}'
+}
+
+# Check if muted
+is_muted() {
+    wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q 'MUTED'
+}
+
+# Set volume to specific level
+set_volume() {
+    local level="$1"
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ "${level}%"
+    notify "Volume" "${level}%" "audio-volume-high"
+}
+
+# Adjust volume relative to current
+adjust_volume() {
+    local adjustment="$1"
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ "${adjustment}%"
+    local new_volume=$(get_volume)
+    notify "Volume" "${new_volume}%" "audio-volume-medium"
+}
+
+# Toggle mute
+toggle_mute() {
+    wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+    if is_muted; then
+        notify "Audio" "Muted" "audio-volume-muted"
+    else
+        local volume=$(get_volume)
+        notify "Audio" "Unmuted (${volume}%)" "audio-volume-high"
+    fi
+}
+
+# Main logic
+main() {
+    if [[ $# -eq 0 ]]; then
+        # No arguments - show current volume
+        local volume=$(get_volume)
+        if is_muted; then
+            echo -e "${YELLOW}Volume:${NC} ${volume}% (muted)"
+        else
+            echo -e "${BOLD}Volume:${NC} ${volume}%"
+        fi
+        return
+    fi
+    
+    local arg="$1"
+    
+    case "$arg" in
+        mute)
+            wpctl set-mute @DEFAULT_AUDIO_SINK@ 1
+            notify "Audio" "Muted" "audio-volume-muted"
+            ;;
+        unmute)
+            wpctl set-mute @DEFAULT_AUDIO_SINK@ 0
+            local volume=$(get_volume)
+            notify "Audio" "Unmuted (${volume}%)" "audio-volume-high"
+            ;;
+        toggle|mute-toggle)
+            toggle_mute
+            ;;
+        +[0-9]*)
+            local amount="${arg:1}"
+            adjust_volume "+${amount}"
+            ;;
+        -[0-9]*)
+            local amount="${arg:1}"
+            adjust_volume "-${amount}"
+            ;;
+        [0-9]*)
+            if (( arg >= 0 && arg <= 100 )); then
+                set_volume "$arg"
+            else
+                echo -e "${BOLD}Error:${NC} Volume must be between 0-100"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Usage: volume [level|+amount|-amount|mute|unmute|toggle]"
+            echo ""
+            echo "Examples:"
+            echo "  volume 50      # Set volume to 50%"
+            echo "  volume +10     # Increase volume by 10%"
+            echo "  volume -5      # Decrease volume by 5%"
+            echo "  volume mute    # Mute audio"
+            echo "  volume unmute  # Unmute audio"
+            echo "  volume toggle  # Toggle mute state"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

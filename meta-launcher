@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# Meta-launcher: Raycast-like command palette for Linux
+# Usage: meta-launcher [command] [args...]
+
+set -euo pipefail
+
+SCRIPTS_DIR="$(dirname "$0")/modules"
+
+# Colors for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[0;33m'
+readonly BLUE='\033[0;34m'
+readonly PURPLE='\033[0;35m'
+readonly CYAN='\033[0;36m'
+readonly NC='\033[0m' # No Color
+
+# Print usage information
+usage() {
+    echo -e "${CYAN}Meta-launcher - Command Palette for Linux${NC}"
+    echo ""
+    echo "Usage: meta-launcher [command] [args...]"
+    echo ""
+    echo -e "${YELLOW}Available modules:${NC}"
+    echo "  audio     - Audio/volume controls"
+    echo "  bluetooth - Bluetooth device management"
+    echo "  network   - Network/WiFi controls"
+    echo "  system    - System controls (brightness, power)"
+    echo "  dev       - Development tools"
+    echo ""
+    echo -e "${YELLOW}Examples:${NC}"
+    echo "  meta-launcher audio volume 50"
+    echo "  meta-launcher bluetooth scan"
+    echo "  meta-launcher system brightness +10"
+    echo ""
+    echo -e "${YELLOW}Interactive mode:${NC}"
+    echo "  meta-launcher          # Show all available commands"
+    echo "  meta-launcher audio    # Show audio commands"
+}
+
+# List all available commands
+list_commands() {
+    local module="$1"
+    
+    if [[ -n "$module" ]] && [[ -d "$SCRIPTS_DIR/$module" ]]; then
+        echo -e "${CYAN}$module commands:${NC}"
+        find "$SCRIPTS_DIR/$module" -type f -executable -printf "%f\n" | sort
+    else
+        echo -e "${CYAN}All available commands:${NC}"
+        for dir in "$SCRIPTS_DIR"/*; do
+            if [[ -d "$dir" ]]; then
+                local module_name=$(basename "$dir")
+                echo -e "${YELLOW}$module_name:${NC}"
+                find "$dir" -type f -executable -printf "  %f\n" | sort
+            fi
+        done
+    fi
+}
+
+# Execute a command intelligently
+execute_command() {
+    local module="$1"
+    local command="$2"
+    shift 2
+    local args=("$@")
+    
+    local script_path="$SCRIPTS_DIR/$module/$command"
+    
+    if [[ -x "$script_path" ]]; then
+        echo -e "${GREEN}Executing:${NC} $module $command ${args[*]}"
+        exec "$script_path" "${args[@]}"
+    else
+        echo -e "${RED}Error:${NC} Command '$module $command' not found"
+        echo ""
+        list_commands "$module"
+        exit 1
+    fi
+}
+
+# Interactive mode with fuzzy search
+interactive_mode() {
+    local module="${1:-}"
+    
+    # Build command list
+    local commands=()
+    
+    if [[ -n "$module" ]] && [[ -d "$SCRIPTS_DIR/$module" ]]; then
+        # Show commands for specific module
+        while IFS= read -r -d '' file; do
+            local cmd=$(basename "$file")
+            commands+=("$module $cmd")
+        done < <(find "$SCRIPTS_DIR/$module" -type f -executable -print0)
+    else
+        # Show all commands
+        while IFS= read -r -d '' file; do
+            local module_name=$(basename "$(dirname "$file")")
+            local cmd=$(basename "$file")
+            commands+=("$module_name $cmd")
+        done < <(find "$SCRIPTS_DIR" -type f -executable -print0)
+    fi
+    
+    if [[ ${#commands[@]} -eq 0 ]]; then
+        echo -e "${RED}No commands found${NC}"
+        exit 1
+    fi
+    
+    # Use fzf for selection if available, otherwise fallback to simple menu
+    if command -v fzf >/dev/null 2>&1; then
+        local selected=$(printf '%s\n' "${commands[@]}" | fzf --prompt="Command: " --height=40% --border)
+    else
+        echo -e "${YELLOW}Available commands:${NC}"
+        for i in "${!commands[@]}"; do
+            echo "$((i+1)). ${commands[i]}"
+        done
+        echo ""
+        read -p "Select command (1-${#commands[@]}): " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#commands[@]} )); then
+            local selected="${commands[$((choice-1))]}"
+        else
+            echo -e "${RED}Invalid selection${NC}"
+            exit 1
+        fi
+    fi
+    
+    if [[ -n "$selected" ]]; then
+        read -r module command <<< "$selected"
+        execute_command "$module" "$command"
+    fi
+}
+
+# Main execution
+main() {
+    # No arguments - show interactive mode
+    if [[ $# -eq 0 ]]; then
+        interactive_mode
+        return
+    fi
+    
+    # Help flag
+    if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+        usage
+        return
+    fi
+    
+    local module="$1"
+    
+    # Just module name - show commands for that module or enter interactive mode
+    if [[ $# -eq 1 ]]; then
+        if [[ -d "$SCRIPTS_DIR/$module" ]]; then
+            interactive_mode "$module"
+        else
+            echo -e "${RED}Error:${NC} Module '$module' not found"
+            echo ""
+            list_commands
+            exit 1
+        fi
+        return
+    fi
+    
+    local command="$2"
+    shift 2
+    local args=("$@")
+    
+    execute_command "$module" "$command" "${args[@]}"
+}
+
+main "$@"

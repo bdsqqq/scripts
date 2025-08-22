@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Quick launcher for immediate testing
+
+# Simple command menu using fzf
+commands=(
+    "audio volume 50|/home/bdsqqq/commonplace/01_files/scripts/modules/audio/volume 50"
+    "audio volume +10|/home/bdsqqq/commonplace/01_files/scripts/modules/audio/volume +10"
+    "audio volume -10|/home/bdsqqq/commonplace/01_files/scripts/modules/audio/volume -10"
+    "audio mute|/home/bdsqqq/commonplace/01_files/scripts/modules/audio/volume mute"
+    "brightness 50|/home/bdsqqq/commonplace/01_files/scripts/modules/system/brightness 50"
+    "brightness +20|/home/bdsqqq/commonplace/01_files/scripts/modules/system/brightness +20"
+    "brightness -20|/home/bdsqqq/commonplace/01_files/scripts/modules/system/brightness -20"
+    "bluetooth scan|/home/bdsqqq/commonplace/01_files/scripts/modules/bluetooth/bt-scan"
+    "bluetooth manager|/home/bdsqqq/commonplace/01_files/scripts/modules/bluetooth/bluetooth"
+    "audio manager|/home/bdsqqq/commonplace/01_files/scripts/modules/audio/audio-manager"
+    "git manager|/home/bdsqqq/commonplace/01_files/scripts/modules/dev/git"
+    "process monitor|/home/bdsqqq/commonplace/01_files/scripts/modules/dev/top"
+)
+
+# Show commands and let user select
+if command -v fzf >/dev/null 2>&1; then
+    selected=$(printf '%s\n' "${commands[@]}" | fzf --prompt="Command: " --height=40% --border --with-nth=1 --delimiter="|")
+else
+    echo "Available commands:"
+    for i in "${!commands[@]}"; do
+        cmd_name=$(echo "${commands[i]}" | cut -d'|' -f1)
+        echo "$((i+1)). $cmd_name"
+    done
+    echo ""
+    read -p "Select command (1-${#commands[@]}): " choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#commands[@]} )); then
+        selected="${commands[$((choice-1))]}"
+    else
+        echo "Invalid selection"
+        exit 1
+    fi
+fi
+
+if [[ -n "$selected" ]]; then
+    command_to_run=$(echo "$selected" | cut -d'|' -f2)
+    echo "Executing: $command_to_run"
+    exec $command_to_run
+fi

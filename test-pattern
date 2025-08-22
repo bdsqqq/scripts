@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+test_inputs=(
+    "volume 20"
+    "set volume 30"
+    "brightness 50"
+    "wifi"
+    "bluetooth"
+)
+
+for input in "${test_inputs[@]}"; do
+    echo "Testing: '$input'"
+    
+    if [[ "$input" =~ ^"set volume ".+ ]] || [[ "$input" =~ ^"volume ".+ ]]; then
+        echo "  ✓ Matches volume pattern"
+        if [[ "$input" =~ ^"set volume " ]]; then
+            volume="${input#set volume }"
+        else
+            volume="${input#volume }"
+        fi
+        echo "  Volume value: '$volume'"
+    elif [[ "$input" =~ ^"set brightness ".+ ]] || [[ "$input" =~ ^"brightness ".+ ]]; then
+        echo "  ✓ Matches brightness pattern"
+    else
+        echo "  → Going to case statement"
+        case "$input" in
+            "wifi")
+                echo "  ✓ Matches wifi case"
+                ;;
+            "bluetooth")
+                echo "  ✓ Matches bluetooth case"
+                ;;
+            *)
+                echo "  ✗ No match found"
+                ;;
+        esac
+    fi
+    echo ""
+done

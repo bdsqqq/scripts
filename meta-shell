@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# Meta-shell: Interactive shell for the meta-launcher
+# Provides command completion and intelligent routing
+
+set -euo pipefail
+
+SCRIPTS_DIR="$(dirname "$0")/modules"
+
+# Colors
+readonly CYAN='\033[0;36m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[0;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m'
+
+# Print welcome message
+welcome() {
+    clear
+    echo -e "${CYAN}╭─────────────────────────────────────╮${NC}"
+    echo -e "${CYAN}│          Meta Launcher Shell       │${NC}"
+    echo -e "${CYAN}╰─────────────────────────────────────╯${NC}"
+    echo ""
+    echo -e "${YELLOW}Available modules:${NC} audio bluetooth network system dev"
+    echo -e "${YELLOW}Type a command or module name to get started${NC}"
+    echo -e "${BLUE}Examples:${NC} audio volume 50, bluetooth scan, dev git"
+    echo ""
+}
+
+# Generate command completions
+generate_completions() {
+    local commands=()
+    
+    # Add module names
+    for dir in "$SCRIPTS_DIR"/*; do
+        if [[ -d "$dir" ]]; then
+            local module_name=$(basename "$dir")
+            commands+=("$module_name")
+        fi
+    done
+    
+    # Add specific commands
+    while IFS= read -r -d '' file; do
+        local module_name=$(basename "$(dirname "$file")")
+        local cmd=$(basename "$file")
+        commands+=("$module_name $cmd")
+        
+        # Add common smart commands
+        case "$cmd" in
+            volume)
+                commands+=("$module_name $cmd 50" "$module_name $cmd +10" "$module_name $cmd -5" "$module_name $cmd mute")
+                ;;
+            brightness)
+                commands+=("$module_name $cmd 80" "$module_name $cmd +20" "$module_name $cmd -10")
+                ;;
+        esac
+    done < <(find "$SCRIPTS_DIR" -type f -executable -print0)
+    
+    printf '%s\n' "${commands[@]}"
+}
+
+# Execute command with smart parsing
+execute_command() {
+    local input="$1"
+    
+    # Parse the input
+    read -ra parts <<< "$input"
+    
+    if [[ ${#parts[@]} -eq 0 ]]; then
+        return
+    fi
+    
+    local module="${parts[0]}"
+    
+    # Check if it's just a module name
+    if [[ ${#parts[@]} -eq 1 ]] && [[ -d "$SCRIPTS_DIR/$module" ]]; then
+        echo -e "${GREEN}$module commands:${NC}"
+        find "$SCRIPTS_DIR/$module" -type f -executable -printf "  %f\n" | sort
+        return
+    fi
+    
+    # Try to execute as full command
+    if [[ ${#parts[@]} -ge 2 ]]; then
+        local command="${parts[1]}"
+        local args=("${parts[@]:2}")
+        
+        local script_path="$SCRIPTS_DIR/$module/$command"
+        
+        if [[ -x "$script_path" ]]; then
+            echo -e "${GREEN}→${NC} $input"
+            "$script_path" "${args[@]}"
+        else
+            echo -e "Command not found: $input"
+        fi
+    else
+        echo -e "Invalid command: $input"
+    fi
+}
+
+# Main interactive loop
+main() {
+    welcome
+    
+    while true; do
+        echo -ne "${CYAN}❯${NC} "
+        
+        # Use fzf for command selection if available
+        if command -v fzf >/dev/null 2>&1; then
+            local input=$(generate_completions | fzf \
+                --height=40% \
+                --border \
+                --prompt="Command: " \
+                --preview="echo 'Execute: {}'" \
+                --preview-window=up:1 \
+                --bind="enter:accept" \
+                --bind="esc:abort" \
+                --header="Type to search, Enter to execute, Esc to cancel")
+            
+            if [[ -n "$input" ]]; then
+                execute_command "$input"
+                echo ""
+                read -p "Press Enter to continue..." -r
+            else
+                echo "Cancelled"
+            fi
+        else
+            # Fallback to simple input
+            read -r input
+            
+            if [[ "$input" == "exit" ]] || [[ "$input" == "quit" ]]; then
+                echo "Goodbye!"
+                break
+            elif [[ -n "$input" ]]; then
+                execute_command "$input"
+                echo ""
+            fi
+        fi
+    done
+}
+
+main "$@"

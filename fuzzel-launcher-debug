@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Debug version of fuzzel-launcher to see what's happening
+
+set -euo pipefail
+
+SCRIPTS_DIR="$(dirname "$0")/modules"
+
+# Build command list for fuzzel
+commands=()
+
+# Add quick commands in natural English
+commands+=(
+    # Audio controls
+    "set volume"
+    "volume"
+    "increase volume" 
+    "decrease volume"
+    "mute audio"
+    "unmute audio"
+    "open audio manager"
+    
+    # Display controls
+    "set brightness"
+    "brightness"
+    "increase brightness"
+    "decrease brightness"
+    
+    # Bluetooth
+    "connect bluetooth device"
+    "bluetooth"
+    "scan for bluetooth devices"
+    "open bluetooth manager"
+    
+    # Network
+    "connect to wifi"
+    "wifi"
+    "list wifi networks"
+    "scan for wifi networks"
+)
+
+# Use fuzzel to show commands
+selected=$(printf '%s\n' "${commands[@]}" | fuzzel --dmenu --prompt="❯ " --lines=15 --width=50)
+
+# Debug: Write what was selected to a file
+echo "Selected: '$selected'" > /tmp/fuzzel-debug.log
+echo "Length: ${#selected}" >> /tmp/fuzzel-debug.log
+
+# Send notification with what was selected
+notify-send "Debug" "Selected: '$selected'" || true
+
+if [[ -n "$selected" ]]; then
+    # Debug the pattern matching
+    echo "Checking patterns..." >> /tmp/fuzzel-debug.log
+    
+    if [[ "$selected" =~ ^"set volume ".+ ]] || [[ "$selected" =~ ^"volume ".+ ]]; then
+        echo "Matched volume pattern" >> /tmp/fuzzel-debug.log
+        notify-send "Debug" "Matched volume pattern" || true
+    elif [[ "$selected" =~ ^"set brightness ".+ ]] || [[ "$selected" =~ ^"brightness ".+ ]]; then
+        echo "Matched brightness pattern" >> /tmp/fuzzel-debug.log
+        notify-send "Debug" "Matched brightness pattern" || true
+    else
+        echo "Going to case statement" >> /tmp/fuzzel-debug.log
+        case "$selected" in
+            "wifi")
+                notify-send "Debug" "Matched wifi case" || true
+                ;;
+            "bluetooth")
+                notify-send "Debug" "Matched bluetooth case" || true
+                ;;
+            *)
+                notify-send "Debug" "No match: '$selected'" || true
+                ;;
+        esac
+    fi
+else
+    echo "Selected was empty!" >> /tmp/fuzzel-debug.log
+    notify-send "Debug" "No selection (empty)" || true
+fi

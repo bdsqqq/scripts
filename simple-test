@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+# Simple test to see if fuzzel passes custom input
+echo "Testing fuzzel custom input..."
+
+result=$(echo -e "option1\noption2\noption3" | fuzzel --dmenu --prompt="Type anything: ")
+
+echo "Result: '$result'"
+echo "Length: ${#result}"
+
+if [[ -n "$result" ]]; then
+    notify-send "Result" "$result" || true
+else
+    notify-send "Empty" "No result" || true
+fi
