@@ -185,7 +185,7 @@ SNAKE_CASE_TITLE=$(to_snake_case "$VIDEO_TITLE")
 # Define the output path and filename
 # Ensure output directory exists
 mkdir -p "$OUTPUT_DIR"
-OUTPUT_FILENAME="${CURRENT_DATE} transcript__${SNAKE_CASE_CHANNEL}__${SNAKE_CASE_TITLE}.md"
+OUTPUT_FILENAME="${CURRENT_DATE} ${SNAKE_CASE_CHANNEL}-${SNAKE_CASE_TITLE} -- type__clipping.md"
 FINAL_OUTPUT_PATH="${OUTPUT_DIR}/${OUTPUT_FILENAME}"
 
 if [ "$VERBOSE" = "true" ]; then

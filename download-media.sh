@@ -128,25 +128,27 @@ if [ -n "$DOWNLOADED_FILE" ]; then
     if [ -f "$INFO_FILE" ]; then
         UPLOADER=$(jq -r '.uploader // .channel // "unknown"' "$INFO_FILE")
         TITLE=$(jq -r '.title // "untitled"' "$INFO_FILE")
-        EXTRACTOR=$(jq -r '.extractor_key // .extractor // "unknown"' "$INFO_FILE")
+        POST_ID=$(jq -r '.id // .display_id // "unknown"' "$INFO_FILE")
         UPLOAD_DATE=$(jq -r '.upload_date // "unknown"' "$INFO_FILE" | sed 's/^\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)$/\1-\2-\3/')
         
         # Sanitize filename components
         UPLOADER_CLEAN=$(sanitize_filename "$UPLOADER")
-        TITLE_CLEAN=$(sanitize_filename "$TITLE")
-        EXTRACTOR_CLEAN=$(sanitize_filename "$EXTRACTOR")
+        # Limit title length to avoid overly long filenames (max 60 chars)
+        TITLE_TRUNCATED=$(echo "$TITLE" | cut -c1-60)
+        TITLE_CLEAN=$(sanitize_filename "$TITLE_TRUNCATED")
+        POST_ID_CLEAN=$(sanitize_filename "$POST_ID")
         
         # Get file extension
         EXT="${DOWNLOADED_FILE##*.}"
         
-        # Create final filename
-        FINAL_NAME="${TODAY} ${UPLOADER_CLEAN}-${TITLE_CLEAN}-${EXTRACTOR_CLEAN} -- type__clipping published__${UPLOAD_DATE}.${EXT}"
+        # Create final filename: YYYY-MM-DD author-tweet_text-postId
+        FINAL_NAME="${TODAY} ${UPLOADER_CLEAN}-${TITLE_CLEAN}-${POST_ID_CLEAN}.${EXT}"
         
         # Move to final location
         mv "$DOWNLOADED_FILE" "$INBOX_DIR/$FINAL_NAME"
         
         # Keep only the media file and info.json, remove everything else
-        INFO_FINAL="${TODAY} ${UPLOADER_CLEAN}-${TITLE_CLEAN}-${EXTRACTOR_CLEAN} -- type__clipping published__${UPLOAD_DATE}.info.json"
+        INFO_FINAL="${TODAY} ${UPLOADER_CLEAN}-${TITLE_CLEAN}-${POST_ID_CLEAN}.info.json"
         mv "$INFO_FILE" "$INBOX_DIR/$INFO_FINAL"
         
         echo "Downloaded: $FINAL_NAME"
